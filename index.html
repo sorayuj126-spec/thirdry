@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ソリティア (Klondike Solitaire) - MVP</title>
+  <style>
+    :root {
+      --bg-color: #0b4f2c;
+      --felt-pattern: radial-gradient(circle at 50% 50%, #166534 0%, #0c4323 100%);
+      --card-width: 76px;
+      --card-height: 106px;
+      --card-radius: 7px;
+      --card-overlap-hidden: 14px;
+      --card-overlap-revealed: 26px;
+      --board-max-width: 820px;
+      --accent-gold: #f59e0b;
+      --accent-green: #10b981;
+    }
+
+    @media (max-width: 620px) {
+      :root {
+        --card-width: 44px;
+        --card-height: 64px;
+        --card-radius: 4px;
+        --card-overlap-hidden: 10px;
+        --card-overlap-revealed: 18px;
+        --board-max-width: 100%;
+      }
+    }
+
+    @media (min-width: 621px) and (max-width: 860px) {
+      :root {
+        --card-width: 60px;
+        --card-height: 84px;
+        --card-overlap-hidden: 12px;
+        --card-overlap-revealed: 22px;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--felt-pattern);
+      background-color: var(--bg-color);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      touch-action: manipulation;
+      overflow-x: hidden;
+    }
+
+    /* ヘッダー・ステータスバー */
+    header {
+      width: 100%;
+      max-width: var(--board-max-width);
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    }
+
+    .title-area h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 14px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    .stat-item span {
+      color: #fbbf24;
+    }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    button.btn {
+      background: #ffffff;
+      color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      padding: 6px 11px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+      transition: all 0.15s ease;
+    }
+
+    button.btn:hover:not(:disabled) {
+      background: #f1f5f9;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+    }
+
+    button.btn:active:not(:disabled) {
+      transform: translateY(1px);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    button.btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    #btn-autocomplete {
+      background: #fbbf24;
+      color: #78350f;
+      display: none;
+      animation: bounce 1.5s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+
+    /* ゲーム盤面 */
+    #game-container {
+      width: 100%;
+      max-width: var(--board-max-width);
+      padding: 12px 10px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      justify-items: center;
+    }
+
+    /* スロット（カード枠） */
+    .slot {
+      width: var(--card-width);
+      height: var(--card-height);
+      border: 2px dashed rgba(255, 255, 255, 0.22);
+      border-radius: var(--card-radius);
+      position: relative;
+      background: rgba(0, 0, 0, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      color: rgba(255, 255, 255, 0.25);
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    .slot.highlight {
+      border-color: var(--accent-gold);
+      background: rgba(245, 158, 11, 0.15);
+    }
+
+    /* 上段のセクション */
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .stock-waste-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .foundations-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* 山札リセットアイコン */
+    #stock-slot.empty {
+      cursor: pointer;
+    }
+
+    #stock-slot.empty::after {
+      content: "↻";
+      font-size: 1.8rem;
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    /* 下段：場札（Tableau） */
+    .tableau-col {
+      width: var(--card-width);
+      min-height: calc(var(--card-height) * 2.5);
+      position: relative;
+    }
+
+    /* カード */
+    .card {
+      width: var(--card-width);
+      height: var(--card-height);
+      border-radius: var(--card-radius);
+      position: absolute;
+      left: 0;
+      top: 0;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 3px 4px;
+      font-weight: bold;
+      box-sizing: border-box;
+      touch-action: none;
+      transition: box-shadow 0.15s ease, outline 0.15s ease;
+    }
+
+    /* カード裏面 */
+    .card.back {
+      background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+      border: 2px solid #ffffff;
+      cursor: default;
+    }
+
+    .card.back::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 3px;
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.08) 4px,
+        transparent 4px,
+        transparent 8px
+      );
+    }
+
+    /* カード表面 */
+    .card.front {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+    }
+
+    .card.front.red {
+      color: #dc2626;
+    }
+
+    .card.front.black {
+      color: #0f172a;
+    }
+
+    /* 選択中のハイライト */
+    .card.selected {
+      outline: 3px solid #fbbf24;
+      outline-offset: 1px;
+      box-shadow: 0 4px 14px rgba(251, 191, 36, 0.7);
+      z-index: 1000 !important;
+    }
+
+    /* カード内の表示 */
+    .card-corner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1;
+    }
+
+    .card-corner.bottom {
+      transform: rotate(180deg);
+    }
+
+    .card-rank {
+      font-size: 0.92rem;
+      font-weight: 800;
+    }
+
+    .card-suit {
+      font-size: 0.85rem;
+    }
+
+    .card-center {
+      align-self: center;
+      font-size: 1.35rem;
+      margin: auto 0;
+      opacity: 0.9;
+    }
+
+    @media (max-width: 620px) {
+      .card-rank { font-size: 0.72rem; }
+      .card-suit { font-size: 0.65rem; }
+      .card-center { font-size: 0.95rem; }
+      .card { padding: 2px 2px; }
+      header { padding: 8px 10px; }
+      .title-area h1 { font-size: 1rem; }
+      .stats { font-size: 0.8rem; gap: 8px; }
+      button.btn { padding: 5px 8px; font-size: 0.75rem; }
+    }
+
+    /* ドラッグ中のゴースト要素 */
+    .dragging-container {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      width: var(--card-width);
+    }
+
+    .dragging {
+      opacity: 0.92;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    /* 勝利モーダル */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+      backdrop-filter: blur(6px);
+    }
+
+    .modal-overlay.active {
+      display: flex;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      color: #1e293b;
+      padding: 30px 36px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      max-width: 90%;
+      width: 380px;
+    }
+
+    .modal-content h2 {
+      color: #166534;
+      font-size: 1.75rem;
+      margin-bottom: 12px;
+    }
+
+    .modal-content p {
+      margin: 8px 0;
+      font-size: 1rem;
+      color: #475569;
+    }
+
+    .modal-content button {
+      margin-top: 20px;
+      padding: 10px 24px;
+      font-size: 1.05rem;
+      background: #166534;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      box-shadow: 0 4px 10px rgba(22, 101, 52, 0.3);
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    .modal-content button:hover {
+      background: #15803d;
+      transform: translateY(-1px);
+    }
+
+    /* 紙吹雪 Canvas */
+    #confetti-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2999;
+    }
+
+    /* ヒントアニメーション */
+    @keyframes hintPulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8); }
+      50% { transform: scale(1.05); box-shadow: 0 0 12px 6px rgba(251, 191, 36, 0.95); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+    }
+
+    .hint-source {
+      animation: hintPulse 1s infinite !important;
+      z-index: 999 !important;
+    }
+
+    .hint-target {
+      outline: 3px dashed #fbbf24 !important;
+      background: rgba(251, 191, 36, 0.25) !important;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-area">
+      <h1>♠ ソリティア (Klondike)</h1>
+    </div>
+    <div class="stats">
+      <div class="stat-item">時間: <span id="timer-display">00:00</span></div>
+      <div class="stat-item">手数: <span id="moves-display">0</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btn-autocomplete" title="残りのカードを自動で組札へ送る">⚡ 自動完成</button>
+      <button class="btn" id="btn-undo" title="1手戻す" disabled>↩ 戻す</button>
+      <button class="btn" id="btn-hint" title="ヒントを表示">💡 ヒント</button>
+      <button class="btn" id="btn-restart" title="新規ゲーム">🔄 新規</button>
+    </div>
+  </header>
+
+  <main id="game-container">
+    <!-- 上段：山札、捨て札、および4つの組札 -->
+    <div class="top-row">
+      <div class="stock-waste-group">
+        <!-- 山札スロット -->
+        <div class="slot" id="stock-slot" title="山札 (クリックでめくる)"></div>
+        <!-- 捨て札スロット -->
+        <div class="slot" id="waste-slot" title="捨て札"></div>
+      </div>
+      <div class="foundations-group">
+        <!-- 組札スロット (4スート) -->
+        <div class="slot foundation" data-foundation-index="0" title="組札 ♠">♠</div>
+        <div class="slot foundation" data-foundation-index="1" title="組札 ♥">♥</div>
+        <div class="slot foundation" data-foundation-index="2" title="組札 ♦">♦</div>
+        <div class="slot foundation" data-foundation-index="3" title="組札 ♣">♣</div>
+      </div>
+    </div>
+
+    <!-- 下段：7つの場札（Tableau） -->
+    <div class="row" id="tableau-row">
+      <div class="tableau-col" data-col-index="0"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="1"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="2"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="3"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="4"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="5"><div class="slot"></div></div>
+      <div class="tableau-col" data-col-index="6"><div class="slot"></div></div>
+    </div>
+  </main>
+
+  <!-- 勝利モーダル -->
+  <div class="modal-overlay" id="win-modal">
+    <div class="modal-content">
+      <h2>🎉 ゲームクリア！ 🎉</h2>
+      <p>おめでとうございます！ソリティアをクリアしました！</p>
+      <p>クリアタイム: <span id="final-time">00:00</span></p>
+      <p>総手数: <span id="final-moves">0</span></p>
+      <button id="btn-modal-restart">もう一度遊ぶ</button>
+    </div>
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // --- 定数と設定 ---
+      const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'];
+      const SUIT_SYMBOLS = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
+      const SUIT_COLORS = { spades: 'black', hearts: 'red', diamonds: 'red', clubs: 'black' };
+      const RANK_LABELS = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+
+      function getRankLabel(rank) {
+        return RANK_LABELS[rank] || String(rank);
+      }
+
+      // --- 状態管理 ---
+      let state = {
+        stock: [],        // 山札
+        waste: [],        // 捨て札
+        foundations: [[], [], [], []], // 4つの組札 (0:♠, 1:♥, 2:♦, 3:♣)
+        tableau: [[], [], [], [], [], [], []], // 7つの場札
+        moves: 0,
+        seconds: 0,
+        timerId: null,
+        gameWon: false
+      };
+
+      let history = []; // Undo履歴
+      let selectedLocation = null; // { area: 'waste'|'tableau'|'foundation', col: number, cardIndex: number }
+      let hintTimeout = null;
+      let isAutoCompleting = false;
+
+      // DOM要素
+      const stockSlot = document.getElementById('stock-slot');
+      const wasteSlot = document.getElementById('waste-slot');
+      const foundationSlots = Array.from(document.querySelectorAll('.slot.foundation'));
+      const tableauCols = Array.from(document.querySelectorAll('.tableau-col'));
+      const timerDisplay = document.getElementById('timer-display');
+      const movesDisplay = document.getElementById('moves-display');
+      const btnUndo = document.getElementById('btn-undo');
+      const btnHint = document.getElementById('btn-hint');
+      const btnRestart = document.getElementById('btn-restart');
+      const btnAutocomplete = document.getElementById('btn-autocomplete');
+      const winModal = document.getElementById('win-modal');
+      const finalTime = document.getElementById('final-time');
+      const finalMoves = document.getElementById('final-moves');
+      const btnModalRestart = document.getElementById('btn-modal-restart');
+      const confettiCanvas = document.getElementById('confetti-canvas');
+
+      // --- カード生成 & シャッフル ---
+      function createDeck() {
+        const deck = [];
+        let idCounter = 1;
+        for (const suit of SUITS) {
+          for (let rank = 1; rank <= 13; rank++) {
+            deck.push({
+              id: idCounter++,
+              suit: suit,
+              rank: rank,
+              color: SUIT_COLORS[suit],
+              faceUp: false
+            });
+          }
+        }
+        return deck;
+      }
+
+      function shuffle(deck) {
+        for (let i = deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+        return deck;
+      }
+
+      // --- 状態のディープコピー (Undo用) ---
+      function cloneState(s) {
+        return {
+          stock: s.stock.map(c => ({ ...c })),
+          waste: s.waste.map(c => ({ ...c })),
+          foundations: s.foundations.map(f => f.map(c => ({ ...c }))),
+          tableau: s.tableau.map(t => t.map(c => ({ ...c }))),
+          moves: s.moves,
+          seconds: s.seconds
+        };
+      }
+
+      function pushHistory() {
+        history.push(cloneState(state));
+        if (history.length > 60) history.shift();
+        btnUndo.disabled = false;
+      }
+
+      // --- タイマー ---
+      function startTimer() {
+        if (state.timerId) clearInterval(state.timerId);
+        state.timerId = setInterval(() => {
+          state.seconds++;
+          updateTimerUI();
+        }, 1000);
+      }
+
+      function stopTimer() {
+        if (state.timerId) {
+          clearInterval(state.timerId);
+          state.timerId = null;
+        }
+      }
+
+      function updateTimerUI() {
+        const mins = String(Math.floor(state.seconds / 60)).padStart(2, '0');
+        const secs = String(state.seconds % 60).padStart(2, '0');
+        timerDisplay.textContent = `${mins}:${secs}`;
+      }
+
+      function incrementMove() {
+        state.moves++;
+        movesDisplay.textContent = state.moves;
+      }
+
+      // --- ゲーム初期化 ---
+      function initGame() {
+        stopTimer();
+        clearHint();
+        isAutoCompleting = false;
+        const deck = shuffle(createDeck());
+        history = [];
+        btnUndo.disabled = true;
+        btnAutocomplete.style.display = 'none';
+        selectedLocation = null;
+
+        state.stock = [];
+        state.waste = [];
+        state.foundations = [[], [], [], []];
+        state.tableau = [[], [], [], [], [], [], []];
+        state.moves = 0;
+        state.seconds = 0;
+        state.gameWon = false;
+
+        movesDisplay.textContent = '0';
+        updateTimerUI();
+        winModal.classList.remove('active');
+        stopConfetti();
+
+        // 7列の場札にカードを配る
+        for (let col = 0; col < 7; col++) {
+          for (let row = 0; row <= col; row++) {
+            const card = deck.pop();
+            card.faceUp = (row === col); // 最上部のみ表向き
+            state.tableau[col].push(card);
+          }
+        }
+
+        // 残りを山札へ
+        state.stock = deck;
+        state.stock.forEach(c => c.faceUp = false);
+
+        startTimer();
+        render();
+      }
+
+      // --- 移動判定ルール ---
+      function canMoveToTableau(card, targetColIndex) {
+        const targetCol = state.tableau[targetColIndex];
+        if (targetCol.length === 0) {
+          return card.rank === 13; // 空列にはKのみ配置可能
+        }
+        const topCard = targetCol[targetCol.length - 1];
+        if (!topCard.faceUp) return false;
+        // 異なる色かつランクが1つ小さい
+        return (card.color !== topCard.color) && (card.rank === topCard.rank - 1);
+      }
+
+      function canMoveToFoundation(card, foundationIndex) {
+        const foundation = state.foundations[foundationIndex];
+        if (foundation.length === 0) {
+          // 最初のカードはA (ランク1) かつスロットのスートと一致
+          return (card.rank === 1) && (card.suit === SUITS[foundationIndex]);
+        }
+        const topCard = foundation[foundation.length - 1];
+        return (card.suit === topCard.suit) && (card.rank === topCard.rank + 1);
+      }
+
+      // --- カード移動処理 ---
+      function moveCards(from, to, recordHistory = true) {
+        if (recordHistory) {
+          pushHistory();
+        }
+
+        let movingCards = [];
+
+        // カードの取り出し
+        if (from.area === 'waste') {
+          movingCards = [state.waste.pop()];
+        } else if (from.area === 'tableau') {
+          const col = state.tableau[from.col];
+          movingCards = col.splice(from.cardIndex);
+          // 移動後に残った一番上のカードが裏向きなら自動で表向きに
+          if (col.length > 0 && !col[col.length - 1].faceUp) {
+            col[col.length - 1].faceUp = true;
+          }
+        } else if (from.area === 'foundation') {
+          movingCards = [state.foundations[from.foundationIndex].pop()];
+        }
+
+        // カードの配置
+        if (to.area === 'tableau') {
+          state.tableau[to.col].push(...movingCards);
+        } else if (to.area === 'foundation') {
+          state.foundations[to.foundationIndex].push(...movingCards);
+        }
+
+        incrementMove();
+        selectedLocation = null;
+        clearHint();
+        render();
+        checkAutoCompleteEligibility();
+        checkWinCondition();
+      }
+
+      // スマート移動（タップ時：まず組札、次に場札）
+      function trySmartMoveCard(from) {
+        let card = null;
+        if (from.area === 'waste') {
+          card = state.waste[state.waste.length - 1];
+        } else if (from.area === 'tableau') {
+          const col = state.tableau[from.col];
+          // 1枚のみ（列の末尾）の場合は組札を最優先
+          if (from.cardIndex === col.length - 1) {
+            card = col[from.cardIndex];
+          }
+        }
+
+        if (card && card.faceUp) {
+          // 1. まず組札への移動を試行
+          for (let fi = 0; fi < 4; fi++) {
+            if (canMoveToFoundation(card, fi)) {
+              moveCards(from, { area: 'foundation', foundationIndex: fi });
+              return true;
+            }
+          }
+        }
+
+        // 2. 場札への移動を試行
+        let sourceCards = [];
+        if (from.area === 'waste') {
+          sourceCards = [state.waste[state.waste.length - 1]];
+        } else if (from.area === 'tableau') {
+          sourceCards = state.tableau[from.col].slice(from.cardIndex);
+        }
+
+        if (sourceCards.length > 0) {
+          const bottomCard = sourceCards[0];
+          for (let tc = 0; tc < 7; tc++) {
+            if (from.area === 'tableau' && from.col === tc) continue;
+            if (canMoveToTableau(bottomCard, tc)) {
+              // 根元のKを別の空列に動かすだけの無駄な手はスキップ
+              if (state.tableau[tc].length === 0 && from.area === 'tableau' && from.cardIndex === 0) {
+                continue;
+              }
+              moveCards(from, { area: 'tableau', col: tc });
+              return true;
+            }
+          }
+        }
+
+        return false;
+      }
+
+      // --- 山札のクリック操作 ---
+      function handleStockClick() {
+        if (isAutoCompleting) return;
+        pushHistory();
+        if (state.stock.length > 0) {
+          // 山札から1枚引いて捨て札へ
+          const card = state.stock.pop();
+          card.faceUp = true;
+          state.waste.push(card);
+        } else {
+          // 山札が空の場合、捨て札をすべて裏返して山札へ戻す
+          if (state.waste.length === 0) return;
+          while (state.waste.length > 0) {
+            const card = state.waste.pop();
+            card.faceUp = false;
+            state.stock.push(card);
+          }
+        }
+        incrementMove();
+        selectedLocation = null;
+        clearHint();
+        render();
+      }
+
+      // --- クリック・タップ操作（選択 & 移動） ---
+      function handleCardClick(location) {
+        if (isAutoCompleting) return;
+        clearHint();
+
+        // 既に選択中のカードがある場合
+        if (selectedLocation) {
+          // 同じカードをタップした場合は選択解除
+          if (isSameLocation(selectedLocation, location)) {
+            selectedLocation = null;
+            render();
+            return;
+          }
+
+          // 選択中のカードを移動できるか試す
+          const sourceCard = getCardAtLocation(selectedLocation);
+          if (sourceCard) {
+            if (location.area === 'foundation') {
+              if (canMoveToFoundation(sourceCard, location.foundationIndex)) {
+                moveCards(selectedLocation, location);
+                return;
+              }
+            } else if (location.area === 'tableau') {
+              if (canMoveToTableau(sourceCard, location.col)) {
+                moveCards(selectedLocation, { area: 'tableau', col: location.col });
+                return;
+              }
+            }
+          }
+        }
+
+        // 新たなカードの処理
+        const clickedCard = getCardAtLocation(location);
+        if (!clickedCard || !clickedCard.faceUp) return;
+
+        // スマート自動移動を試行
+        const moved = trySmartMoveCard(location);
+        if (!moved) {
+          // 移動できなかった場合はそのカードを選択ハイライト
+          selectedLocation = location;
+          render();
+        }
+      }
+
+      function handleSlotClick(location) {
+        if (isAutoCompleting) return;
+        clearHint();
+        if (!selectedLocation) return;
+
+        const sourceCard = getCardAtLocation(selectedLocation);
+        if (!sourceCard) return;
+
+        if (location.area === 'foundation') {
+          if (canMoveToFoundation(sourceCard, location.foundationIndex)) {
+            moveCards(selectedLocation, location);
+          }
+        } else if (location.area === 'tableau') {
+          if (canMoveToTableau(sourceCard, location.col)) {
+            moveCards(selectedLocation, location);
+          }
+        }
+      }
+
+      function isSameLocation(loc1, loc2) {
+        if (!loc1 || !loc2) return false;
+        if (loc1.area !== loc2.area) return false;
+        if (loc1.area === 'waste') return true;
+        if (loc1.area === 'foundation') return loc1.foundationIndex === loc2.foundationIndex;
+        if (loc1.area === 'tableau') return loc1.col === loc2.col && loc1.cardIndex === loc2.cardIndex;
+        return false;
+      }
+
+      function getCardAtLocation(loc) {
+        if (!loc) return null;
+        if (loc.area === 'waste') {
+          return state.waste[state.waste.length - 1] || null;
+        }
+        if (loc.area === 'foundation') {
+          const f = state.foundations[loc.foundationIndex];
+          return f[f.length - 1] || null;
+        }
+        if (loc.area === 'tableau') {
+          const col = state.tableau[loc.col];
+          return col[loc.cardIndex] || null;
+        }
+        return null;
+      }
+
+      // --- ドラッグ＆ドロップ (Pointer Events) ---
+      let dragData = null;
+
+      function initPointerDrag(element, location, e) {
+        if (isAutoCompleting) return;
+        if (e.button !== 0) return; // 左クリック以外無視
+        const card = getCardAtLocation(location);
+        if (!card || !card.faceUp) return;
+
+        let movingCards = [];
+        if (location.area === 'tableau') {
+          movingCards = state.tableau[location.col].slice(location.cardIndex);
+        } else if (location.area === 'waste') {
+          movingCards = [state.waste[state.waste.length - 1]];
+        } else if (location.area === 'foundation') {
+          movingCards = [state.foundations[location.foundationIndex][state.foundations[location.foundationIndex].length - 1]];
+        }
+
+        const rect = element.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+
+        dragData = {
+          originLoc: location,
+          movingCards: movingCards,
+          offsetX: offsetX,
+          offsetY: offsetY,
+          hasMoved: false,
+          startX: e.clientX,
+          startY: e.clientY,
+          cloneContainer: null
+        };
+
+        element.setPointerCapture(e.pointerId);
+
+        function onPointerMove(moveEvent) {
+          if (!dragData) return;
+          const dist = Math.hypot(moveEvent.clientX - dragData.startX, moveEvent.clientY - dragData.startY);
+          if (!dragData.hasMoved && dist > 6) {
+            dragData.hasMoved = true;
+            createDragClones(moveEvent);
+          }
+
+          if (dragData.hasMoved && dragData.cloneContainer) {
+            dragData.cloneContainer.style.left = `${moveEvent.clientX - dragData.offsetX}px`;
+            dragData.cloneContainer.style.top = `${moveEvent.clientY - dragData.offsetY}px`;
+          }
+        }
+
+        function onPointerUp(upEvent) {
+          element.removeEventListener('pointermove', onPointerMove);
+          element.removeEventListener('pointerup', onPointerUp);
+          element.removeEventListener('pointercancel', onPointerUp);
+
+          if (dragData && dragData.hasMoved) {
+            if (dragData.cloneContainer) {
+              dragData.cloneContainer.remove();
+            }
+            handleDrop(upEvent.clientX, upEvent.clientY);
+          } else {
+            // 移動距離が小さければタップ・クリックとして処理
+            handleCardClick(location);
+          }
+
+          dragData = null;
+        }
+
+        element.addEventListener('pointermove', onPointerMove);
+        element.addEventListener('pointerup', onPointerUp);
+        element.addEventListener('pointercancel', onPointerUp);
+      }
+
+      function createDragClones(e) {
+        const container = document.createElement('div');
+        container.className = 'dragging-container';
+        container.style.left = `${e.clientX - dragData.offsetX}px`;
+        container.style.top = `${e.clientY - dragData.offsetY}px`;
+
+        const overlap = getComputedOverlap(true);
+
+        dragData.movingCards.forEach((c, idx) => {
+          const cardEl = createCardElement(c);
+          cardEl.style.position = 'absolute';
+          cardEl.style.top = `${idx * overlap}px`;
+          cardEl.style.left = '0';
+          cardEl.classList.add('dragging');
+          container.appendChild(cardEl);
+        });
+
+        document.body.appendChild(container);
+        dragData.cloneContainer = container;
+      }
+
+      function getComputedOverlap(isRevealed) {
+        const root = document.documentElement;
+        const style = getComputedStyle(root);
+        const val = style.getPropertyValue(isRevealed ? '--card-overlap-revealed' : '--card-overlap-hidden').trim();
+        return parseInt(val, 10) || (isRevealed ? 26 : 14);
+      }
+
+      function handleDrop(clientX, clientY) {
+        const elements = document.elementsFromPoint(clientX, clientY);
+        let targetLoc = null;
+
+        for (const el of elements) {
+          const tableauCol = el.closest('.tableau-col');
+          if (tableauCol) {
+            const colIndex = parseInt(tableauCol.dataset.colIndex, 10);
+            targetLoc = { area: 'tableau', col: colIndex };
+            break;
+          }
+
+          const foundation = el.closest('.slot.foundation');
+          if (foundation) {
+            const fi = parseInt(foundation.dataset.foundationIndex, 10);
+            targetLoc = { area: 'foundation', foundationIndex: fi };
+            break;
+          }
+        }
+
+        if (!targetLoc) return;
+
+        // 同じ列へのドロップは無視
+        if (targetLoc.area === 'tableau' && dragData.originLoc.area === 'tableau' && targetLoc.col === dragData.originLoc.col) {
+          return;
+        }
+
+        const bottomCard = dragData.movingCards[0];
+
+        if (targetLoc.area === 'foundation') {
+          if (dragData.movingCards.length === 1 && canMoveToFoundation(bottomCard, targetLoc.foundationIndex)) {
+            moveCards(dragData.originLoc, targetLoc);
+          }
+        } else if (targetLoc.area === 'tableau') {
+          if (canMoveToTableau(bottomCard, targetLoc.col)) {
+            moveCards(dragData.originLoc, targetLoc);
+          }
+        }
+      }
+
+      // --- レンダリング ---
+      function createCardElement(card) {
+        const el = document.createElement('div');
+        el.className = `card ${card.faceUp ? 'front ' + card.color : 'back'}`;
+        el.dataset.cardId = card.id;
+
+        if (card.faceUp) {
+          const rankText = getRankLabel(card.rank);
+          const suitIcon = SUIT_SYMBOLS[card.suit];
+
+          el.innerHTML = `
+            <div class="card-corner top">
+              <span class="card-rank">${rankText}</span>
+              <span class="card-suit">${suitIcon}</span>
+            </div>
+            <div class="card-center">${suitIcon}</div>
+            <div class="card-corner bottom">
+              <span class="card-rank">${rankText}</span>
+              <span class="card-suit">${suitIcon}</span>
+            </div>
+          `;
+        }
+        return el;
+      }
+
+      function render() {
+        // 1. 山札
+        stockSlot.innerHTML = '';
+        if (state.stock.length > 0) {
+          stockSlot.classList.remove('empty');
+          stockSlot.onclick = null;
+          const topCard = state.stock[state.stock.length - 1];
+          const cardEl = createCardElement(topCard);
+          cardEl.addEventListener('click', handleStockClick);
+          stockSlot.appendChild(cardEl);
+        } else {
+          stockSlot.classList.add('empty');
+          stockSlot.onclick = handleStockClick;
+        }
+
+        // 2. 捨て札
+        wasteSlot.innerHTML = '';
+        if (state.waste.length > 0) {
+          const topCard = state.waste[state.waste.length - 1];
+          const cardEl = createCardElement(topCard);
+          const loc = { area: 'waste' };
+          if (selectedLocation && isSameLocation(selectedLocation, loc)) {
+            cardEl.classList.add('selected');
+          }
+          cardEl.addEventListener('pointerdown', (e) => initPointerDrag(cardEl, loc, e));
+          wasteSlot.appendChild(cardEl);
+        }
+
+        // 3. 組札
+        state.foundations.forEach((fCards, idx) => {
+          const slot = foundationSlots[idx];
+          slot.innerHTML = SUIT_SYMBOLS[SUITS[idx]];
+
+          slot.onclick = () => handleSlotClick({ area: 'foundation', foundationIndex: idx });
+
+          if (fCards.length > 0) {
+            const topCard = fCards[fCards.length - 1];
+            const cardEl = createCardElement(topCard);
+            const loc = { area: 'foundation', foundationIndex: idx };
+            if (selectedLocation && isSameLocation(selectedLocation, loc)) {
+              cardEl.classList.add('selected');
+            }
+            cardEl.addEventListener('pointerdown', (e) => initPointerDrag(cardEl, loc, e));
+            slot.appendChild(cardEl);
+          }
+        });
+
+        // 4. 場札
+        const hiddenOverlap = getComputedOverlap(false);
+        const revealedOverlap = getComputedOverlap(true);
+        const cardHeightVal = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-height'), 10) || 100;
+
+        state.tableau.forEach((colCards, colIdx) => {
+          const colEl = tableauCols[colIdx];
+          colEl.innerHTML = '';
+
+          // 背景スロット
+          const baseSlot = document.createElement('div');
+          baseSlot.className = 'slot';
+          baseSlot.onclick = () => handleSlotClick({ area: 'tableau', col: colIdx });
+          colEl.appendChild(baseSlot);
+
+          let currentTop = 0;
+
+          colCards.forEach((card, cardIdx) => {
+            const cardEl = createCardElement(card);
+            cardEl.style.top = `${currentTop}px`;
+            cardEl.style.zIndex = cardIdx + 1;
+
+            const loc = { area: 'tableau', col: colIdx, cardIndex: cardIdx };
+
+            if (selectedLocation && isSameLocation(selectedLocation, loc)) {
+              cardEl.classList.add('selected');
+            }
+
+            if (card.faceUp) {
+              cardEl.addEventListener('pointerdown', (e) => initPointerDrag(cardEl, loc, e));
+            }
+
+            colEl.appendChild(cardEl);
+
+            currentTop += card.faceUp ? revealedOverlap : hiddenOverlap;
+          });
+
+          // 列の高さを調整
+          colEl.style.height = `${Math.max(cardHeightVal * 2.5, currentTop + cardHeightVal)}px`;
+        });
+      }
+
+      // --- ヒント機能 ---
+      function clearHint() {
+        if (hintTimeout) {
+          clearTimeout(hintTimeout);
+          hintTimeout = null;
+        }
+        document.querySelectorAll('.hint-source, .hint-target').forEach(el => {
+          el.classList.remove('hint-source', 'hint-target');
+        });
+      }
+
+      function showHint() {
+        clearHint();
+
+        // 1. 捨て札から組札へ
+        if (state.waste.length > 0) {
+          const card = state.waste[state.waste.length - 1];
+          for (let fi = 0; fi < 4; fi++) {
+            if (canMoveToFoundation(card, fi)) {
+              highlightHint(wasteSlot.querySelector('.card'), foundationSlots[fi]);
+              return;
+            }
+          }
+        }
+
+        // 2. 場札から組札へ
+        for (let c = 0; c < 7; c++) {
+          const col = state.tableau[c];
+          if (col.length > 0) {
+            const card = col[col.length - 1];
+            if (card.faceUp) {
+              for (let fi = 0; fi < 4; fi++) {
+                if (canMoveToFoundation(card, fi)) {
+                  const cardEls = tableauCols[c].querySelectorAll('.card');
+                  highlightHint(cardEls[cardEls.length - 1], foundationSlots[fi]);
+                  return;
+                }
+              }
+            }
+          }
+        }
+
+        // 3. 場札間での移動（裏向きカードが表になる手を優先）
+        for (let c = 0; c < 7; c++) {
+          const col = state.tableau[c];
+          for (let i = 0; i < col.length; i++) {
+            const card = col[i];
+            if (!card.faceUp) continue;
+
+            for (let tc = 0; tc < 7; tc++) {
+              if (c === tc) continue;
+              if (canMoveToTableau(card, tc)) {
+                if (card.rank === 13 && i === 0 && state.tableau[tc].length === 0) continue;
+
+                const cardEls = tableauCols[c].querySelectorAll('.card');
+                const targetCol = tableauCols[tc];
+                const targetCardEls = targetCol.querySelectorAll('.card');
+                const targetEl = targetCardEls.length > 0 ? targetCardEls[targetCardEls.length - 1] : targetCol.querySelector('.slot');
+
+                highlightHint(cardEls[i], targetEl);
+                return;
+              }
+            }
+          }
+        }
+
+        // 4. 捨て札から場札へ
+        if (state.waste.length > 0) {
+          const card = state.waste[state.waste.length - 1];
+          for (let tc = 0; tc < 7; tc++) {
+            if (canMoveToTableau(card, tc)) {
+              const targetCol = tableauCols[tc];
+              const targetCardEls = targetCol.querySelectorAll('.card');
+              const targetEl = targetCardEls.length > 0 ? targetCardEls[targetCardEls.length - 1] : targetCol.querySelector('.slot');
+              highlightHint(wasteSlot.querySelector('.card'), targetEl);
+              return;
+            }
+          }
+        }
+
+        // 5. 山札を引く
+        if (state.stock.length > 0 || state.waste.length > 0) {
+          highlightHint(stockSlot, stockSlot);
+          return;
+        }
+
+        alert('可能な手がありません。');
+      }
+
+      function highlightHint(sourceEl, targetEl) {
+        if (sourceEl) sourceEl.classList.add('hint-source');
+        if (targetEl && targetEl !== sourceEl) targetEl.classList.add('hint-target');
+
+        hintTimeout = setTimeout(() => {
+          clearHint();
+        }, 3000);
+      }
+
+      // --- オートコンプリート（全カードが表向きになった時） ---
+      function checkAutoCompleteEligibility() {
+        if (state.gameWon || isAutoCompleting) return;
+
+        // 山札と捨て札が空か
+        if (state.stock.length > 0 || state.waste.length > 0) {
+          btnAutocomplete.style.display = 'none';
+          return;
+        }
+
+        // 場札に裏向きカードがあるか確認
+        for (const col of state.tableau) {
+          for (const card of col) {
+            if (!card.faceUp) {
+              btnAutocomplete.style.display = 'none';
+              return;
+            }
+          }
+        }
+
+        // すべて表向きなら自動完成ボタンを表示
+        const totalFoundation = state.foundations.reduce((sum, f) => sum + f.length, 0);
+        if (totalFoundation < 52) {
+          btnAutocomplete.style.display = 'flex';
+        } else {
+          btnAutocomplete.style.display = 'none';
+        }
+      }
+
+      function triggerAutoComplete() {
+        if (isAutoCompleting) return;
+        isAutoCompleting = true;
+        btnAutocomplete.style.display = 'none';
+        btnUndo.disabled = true;
+
+        function step() {
+          let movedAny = false;
+
+          for (let c = 0; c < 7; c++) {
+            const col = state.tableau[c];
+            if (col.length > 0) {
+              const card = col[col.length - 1];
+              for (let fi = 0; fi < 4; fi++) {
+                if (canMoveToFoundation(card, fi)) {
+                  moveCards({ area: 'tableau', col: c, cardIndex: col.length - 1 }, { area: 'foundation', foundationIndex: fi }, false);
+                  movedAny = true;
+                  break;
+                }
+              }
+              if (movedAny) break;
+            }
+          }
+
+          const totalFoundation = state.foundations.reduce((sum, f) => sum + f.length, 0);
+          if (totalFoundation < 52 && movedAny) {
+            setTimeout(step, 90);
+          } else {
+            isAutoCompleting = false;
+            checkWinCondition();
+          }
+        }
+
+        step();
+      }
+
+      // --- 勝利判定 ---
+      function checkWinCondition() {
+        const totalFoundationCards = state.foundations.reduce((sum, f) => sum + f.length, 0);
+        if (totalFoundationCards === 52) {
+          stopTimer();
+          state.gameWon = true;
+          btnAutocomplete.style.display = 'none';
+          finalTime.textContent = timerDisplay.textContent;
+          finalMoves.textContent = state.moves;
+          winModal.classList.add('active');
+          startConfetti();
+        }
+      }
+
+      // --- Undo機能 ---
+      function undo() {
+        if (history.length === 0 || isAutoCompleting) return;
+        clearHint();
+        selectedLocation = null;
+        const prev = history.pop();
+
+        state.stock = prev.stock;
+        state.waste = prev.waste;
+        state.foundations = prev.foundations;
+        state.tableau = prev.tableau;
+        state.moves = prev.moves;
+
+        movesDisplay.textContent = state.moves;
+        if (history.length === 0) {
+          btnUndo.disabled = true;
+        }
+        render();
+        checkAutoCompleteEligibility();
+      }
+
+      // --- 紙吹雪アニメーション ---
+      let confettiAnimationId = null;
+      function startConfetti() {
+        const ctx = confettiCanvas.getContext('2d');
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+
+        const pieces = [];
+        const colors = ['#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#84cc16', '#eab308', '#f97316'];
+
+        for (let i = 0; i < 160; i++) {
+          pieces.push({
+            x: Math.random() * confettiCanvas.width,
+            y: Math.random() * confettiCanvas.height - confettiCanvas.height,
+            size: Math.random() * 8 + 6,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            speedY: Math.random() * 3 + 2.5,
+            speedX: Math.random() * 2 - 1,
+            rotation: Math.random() * 360,
+            rotSpeed: Math.random() * 4 - 2
+          });
+        }
+
+        function loop() {
+          ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+          pieces.forEach(p => {
+            p.y += p.speedY;
+            p.x += p.speedX;
+            p.rotation += p.rotSpeed;
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate((p.rotation * Math.PI) / 180);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            ctx.restore();
+
+            if (p.y > confettiCanvas.height) {
+              p.y = -10;
+              p.x = Math.random() * confettiCanvas.width;
+            }
+          });
+          confettiAnimationId = requestAnimationFrame(loop);
+        }
+
+        loop();
+      }
+
+      function stopConfetti() {
+        if (confettiAnimationId) {
+          cancelAnimationFrame(confettiAnimationId);
+          confettiAnimationId = null;
+        }
+        const ctx = confettiCanvas.getContext('2d');
+        ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      }
+
+      window.addEventListener('resize', () => {
+        if (state.gameWon) {
+          confettiCanvas.width = window.innerWidth;
+          confettiCanvas.height = window.innerHeight;
+        }
+      });
+
+      // --- イベントリスナー設定 ---
+      btnRestart.addEventListener('click', () => {
+        if (state.moves > 0 && !state.gameWon) {
+          if (confirm('新しいゲームを開始しますか？')) {
+            initGame();
+          }
+        } else {
+          initGame();
+        }
+      });
+
+      btnModalRestart.addEventListener('click', initGame);
+      btnUndo.addEventListener('click', undo);
+      btnHint.addEventListener('click', showHint);
+      btnAutocomplete.addEventListener('click', triggerAutoComplete);
+
+      // 初期化実行
+      initGame();
+    })();
+  </script>
+</body>
+</html>
